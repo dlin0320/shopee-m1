@@ -13,9 +13,17 @@ def main():
     else:
         dir = os.path.dirname(os.path.abspath(__file__))
     if dir:
+        try:
+            os.mkdir(f'{dir}/temp')
+        except Exception as e:
+            pass
         dir += '/temp'
     else:
         dir = '.'
+        try:
+            os.mkdir(f'{dir}/temp') 
+        except Exception as e:
+            pass
     # shutil.rmtree(f'{dir}/profiles', ignore_errors=True)
     load_dotenv()
     Logger(dir)

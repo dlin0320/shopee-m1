@@ -1,10 +1,8 @@
-*.log
-*.db
-*.spec
 build
 dist
-__pycache__
-profiles
 temp
+__pycache__
 .venv
 .env
+*.spec
+*.db

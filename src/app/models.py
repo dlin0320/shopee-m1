@@ -34,8 +34,8 @@ class Advertisement:
         return self.cursor.fetchall()
 
 class History:
-    def __init__(self) -> None:
-        self.conn = sqlite3.connect('local.db')
+    def __init__(self, dir) -> None:
+        self.conn = sqlite3.connect(f'{dir}local.db')
         self.cursor = self.conn.cursor()
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS histories(

@@ -25,7 +25,7 @@ class UltimateWindow(Window):
         self.shops = []
         self.profiles = {}
         self.advertisements = Advertisement(dir)
-        self.histories = History()
+        self.histories = History(dir)
         self.autoTask = None
         self.rankingsTask = None
         self.detailsTask = None
@@ -182,7 +182,7 @@ class UltimateWindow(Window):
                         break
                     self.loop.create_task(self.searchAndUpdate(self.backgroundRows.get()))
                     await asyncio.sleep(random.uniform(9,21))
-                await asyncio.sleep(9)
+                await asyncio.sleep(3)
         except Exception as e:
             print('search error')
             logging.debug(e.__class__, exc_info=True)
@@ -212,15 +212,19 @@ class UltimateWindow(Window):
             while True:
                 self.msg.set('運行中')
                 # await self.refreshShopeeProfile()
-                await self.autoPrices()
+                newPrices = await self.autoPrices()
                 await self.changePrices()
-                next = int(random.uniform(min, max))
+                if newPrices == 0:
+                    next = 5
+                else:
+                    next = int(random.uniform(min, max))
                 await asyncio.sleep(next)
         except Exception as e:
             self.msg.set('已停止') 
             logging.debug(e.__class__, exc_info=True)
 
     async def autoPrices(self):
+        newPrices = 0
         try:
             self.msg.set('計算新價格...')
             for row in self.table.tag_has('auto'):
@@ -258,10 +262,12 @@ class UltimateWindow(Window):
                     if float(new_price) == float(price):
                         continue
                 await self.updateRow(row, new_price=new_price)
+                newPrices += 1
         except Exception as e:
             logging.debug(e.__class__, exc_info=True)
         finally:
             self.msg.set('')
+            return newPrices
 
     async def changePrices(self):
         pendingRows = self.table.tag_has('change')
@@ -360,7 +366,11 @@ class UltimateWindow(Window):
             values[self.getIndex('name')] = advertisement[2]
             values[self.getIndex('price')] = advertisement[3]
             values[self.getIndex('target_ad')] = advertisement[4]
-            self.backgroundRows.put(self.table.insert('', index='end', text=advertisement[0], values=values, iid=f'{advertisement[1]} {advertisement[2]}'))
+            row = self.table.insert('', index='end', text=advertisement[0], values=values, iid=f'{advertisement[1]} {advertisement[2]}')
+            if advertisement[4] != '':
+                self.priorityRows.put(row)
+            else:
+                self.backgroundRows.put(row)
         except Exception as e:
             pass
 
@@ -370,7 +380,7 @@ class UltimateWindow(Window):
         newValues = list(values)
         for key, value in kwargs.items():
             newValues[self.getIndex(key)] = value
-            if key == 'time':
+            if key == 'time' or 'target_ad':
                 self.priorityRows.put(row)
         id = self.getValue(newValues, 'id')
         name = self.getValue(newValues, 'name')
