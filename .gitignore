@@ -1,0 +1,10 @@
+*.log
+*.db
+*.spec
+build
+dist
+__pycache__
+profiles
+temp
+.venv
+.env
