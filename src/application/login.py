@@ -1,6 +1,6 @@
-from app.window import Window
 from tkinter import StringVar, Label, Entry, Button
 import asyncio
+from application.window import Window
 from server.scripts import login
 
 class LoginWindow(Window):

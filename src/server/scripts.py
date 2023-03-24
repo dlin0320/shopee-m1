@@ -18,7 +18,7 @@ async def report(username, time, searches, connections):
     res = await goto(url=s.report, method='post', json=s.genReport(username, time, searches, connections))
     if res.status_code == 200:
         return True
-    elif res.status_code == 401:
+    else:
         return False
 
 async def bindAccount():

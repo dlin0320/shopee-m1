@@ -336,3 +336,4 @@ async def getDetails(cookie: str, agent: str, itemId: str, span=7):
 #     except Exception as e:
 #         logging.error(e.__class__, exc_info=True)
 #         return False, None, None
+# shopee-select__menu shopee-select__menu_no_top_radius

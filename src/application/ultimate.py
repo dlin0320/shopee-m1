@@ -1,19 +1,23 @@
 from datetime import datetime
-from app.window import Window
+from application.window import Window
 from server.scripts import report
 from shopee.shopee import ChangePayload, SearchPayload
 import logging
 from time import time
-from app.models import Advertisement, History
+from application.models import History, Shop
 from shopee.scripts import changePrice, getDetails, search, shopeeLogin, getAdvertisements
 from tkinter import StringVar, Frame, Button, BOTTOM, LEFT, RIGHT, simpledialog, ttk, Label, DISABLED, NORMAL, OptionMenu
 import asyncio
 import queue
 import random
 from PIL import Image, ImageTk
+import shutil
 
 class UltimateWindow(Window):
     def __init__(self, loop, dir, os, username) -> None:
+        Shop(dir)
+        History(dir)
+        print('init dir', History.dir)
         super().__init__(loop, dir)
         self.window.geometry('1369x690')
         self.window.title('廣告幫手ultimate')
@@ -24,8 +28,6 @@ class UltimateWindow(Window):
         self.connections = 0
         self.shops = []
         self.profiles = {}
-        self.advertisements = Advertisement(dir)
-        self.histories = History(dir)
         self.autoTask = None
         self.rankingsTask = None
         self.detailsTask = None
@@ -48,11 +50,8 @@ class UltimateWindow(Window):
         self.tableFrame = Frame(self.window)
         self.tableFrame.pack(side=BOTTOM)
 
-        Button(self.buttonFrame, text='test', command=self.exportFile).pack(side=LEFT)
         self.profileButton = Button(self.buttonFrame, text='新增帳號', command=lambda: self.loop.create_task(self.newProfile()))
         self.profileButton.pack(side=LEFT)
-        self.keywordButton = Button(self.buttonFrame, text='新增關鍵字', command=lambda: self.loop.create_task(self.addKeyword()))
-        self.keywordButton.pack(side=LEFT)
         Button(self.buttonFrame, text='載入紀錄', command=lambda: self.loop.create_task(self.loadHistories())).pack(side=LEFT)
         self.spanOption = OptionMenu(self.optionFrame, self.span, '1', '7', '30', command=lambda _: self.loop.create_task(self.getDetails()))
         self.spanOption.config(state=DISABLED)
@@ -60,25 +59,33 @@ class UltimateWindow(Window):
         Label(self.messageFrame, textvariable=self.msg).pack()
 
         self.table = ttk.Treeview(self.tableFrame, height=100) 
-        self.columns = ['id', '關鍵字', '價格', '新價格', '最高價格[x]', '最低價格[n]', '目標排名[a]', '廣告排名', '自然排名', '花費', '銷售額', 'ROAS', '最低ROAS[r]', '修改時間']
+        self.columns = ['id', '關鍵字', '價格', '新價格', '最高價格[x]', '最低價格[n]', '目標排名[a]', '廣告排名', '自然排名', '花費', '銷售額', 'ROAS', '最低ROAS[o]', '修改時間']
         self.columnIndices = {'id':0, 'name':1, 'price':2, 'new_price':3, 'max_price':4, 'min_price':5, 'target_ad':6, 'ad':7, 'hype':8, 'cost':9, 'sales':10, 'roas':11, 'min_roas':12, 'time':13}
 
     # Task
-    def createTask(self, name, task, **kwargs):
-        setattr(self, name, self.loop.create_task(task(**kwargs)))
+    # def createTask(self, name, task, **kwargs):
+    #     setattr(self, name, self.loop.create_task(task(**kwargs)))
 
-    def stopTask(self, name, callback=None, **kwargs):
-        if name == None:
-            return None
-        for task in asyncio.all_tasks(self.loop):
-            if task.get_name() == name:
-                task.cancel()
-                if callback != None:
-                    callback(**kwargs)
+    # def stopTask(self, name, callback=None, **kwargs):
+    #     if name == None:
+    #         return None
+    #     for task in asyncio.all_tasks(self.loop):
+    #         if task.get_name() == name:
+    #             task.cancel()
+    #             if callback != None:
+    #                 callback(**kwargs)
 
     # Init
     async def show(self):
         self.currentTime = time()
+        shops = Shop.select()
+        for shop in shops:
+            print(shop)
+            id, cookie, agent = shop
+            print(id, cookie, agent)
+            self.shops.append(id)
+            self.profiles[id] = (cookie, agent)
+        print(self.shops, self.profiles)
         await self.makeTable()
         self.loop.create_task(self.searchRankings())
         self.loop.create_task(self.auto())
@@ -101,31 +108,40 @@ class UltimateWindow(Window):
             await asyncio.sleep(.1)
 
     async def loadHistories(self):
-        if len(self.shops) == 0:
-            return
-        for ad in self.histories.select():
-            if ad[0] in self.shops:
-                await self.insertRow(ad)
-
-    # async def checkShops(self):
-        # for shop in self.shops:
-
+        # if len(self.shops) == 0:
+        #     return
+        for ad in History.select():
+            # if ad[0] in self.shops:
+            print('new ad', ad)
+            self.insertRow(ad)
+            print('inserted', ad)
+        print('loaded')
 
     # Profile
     async def newProfile(self):
         try:
             self.profileButton.config(state=DISABLED)
             dir = f'{self.dir}/profiles/{len(self.shops)}'
+            print(dir)
             ok, id, cookie, agent =  await shopeeLogin(self.os, dir)
             if ok:
-                for ad in await getAdvertisements(cookie, agent):
-                    self.advertisements.insert((id, *ad))
+                if self.shops.__contains__(id):
+                    index = self.shops.index(id) 
+                    self.shops[index] = '0'
+                    dir = f'{self.dir}/profiles/{index}'
+                    shutil.rmtree(dir, ignore_errors=True)
+                    print('removed ', dir)
+                # for ad in await getAdvertisements(cookie, agent):
+                    # self.advertisements.insert((id, *ad))
+                Shop.insert((id, cookie, agent))
                 self.shops.append(id)
                 self.profiles[id] = (cookie, agent)
         except Exception as e:
             logging.debug(e.__class__, exc_info=True)
         finally:
             self.profileButton.config(state=NORMAL)
+            print(len(self.shops))
+            print(Shop.select())
 
     async def checkSubscription(self):
         # TODO
@@ -174,15 +190,22 @@ class UltimateWindow(Window):
     async def searchRankings(self):
         try:
             while True:
+                next = random.uniform(3, 6)
+                if len(self.shops) == 0:
+                    await asyncio.sleep(next)
+                    continue 
+                print(self.priorityRows.qsize(), self.backgroundRows.qsize())
                 while not self.priorityRows.empty():
+                    print('priority:', self.priorityRows.queue)
                     self.loop.create_task(self.searchAndUpdate(self.priorityRows.get()))
                     await asyncio.sleep(random.uniform(9,21))
                 while not self.backgroundRows.empty():
+                    print('background:', self.backgroundRows.queue)
                     if not self.priorityRows.empty():
                         break
                     self.loop.create_task(self.searchAndUpdate(self.backgroundRows.get()))
                     await asyncio.sleep(random.uniform(9,21))
-                await asyncio.sleep(3)
+                await asyncio.sleep(next)
         except Exception as e:
             print('search error')
             logging.debug(e.__class__, exc_info=True)
@@ -193,7 +216,9 @@ class UltimateWindow(Window):
             values = self.table.item(row, 'values')
             id = self.getValue(values, 'id')
             name = self.getValue(values, 'name')
+            print(name, id, row)
             result = await search(self.os, SearchPayload(name, id, row))
+            print(result)
             if result != None:
                 await self.updateRow(result.row, ad=result.ad, hype=result.hype)
         except Exception as e:
@@ -209,6 +234,8 @@ class UltimateWindow(Window):
             else:
                 min = (int(cycle) * 0.69) * 60
                 max = (int(cycle)) * 60
+            # min = 50
+            # max = 70
             while True:
                 self.msg.set('運行中')
                 # await self.refreshShopeeProfile()
@@ -218,6 +245,7 @@ class UltimateWindow(Window):
                     next = 5
                 else:
                     next = int(random.uniform(min, max))
+                    logging.error(next)
                 await asyncio.sleep(next)
         except Exception as e:
             self.msg.set('已停止') 
@@ -312,7 +340,7 @@ class UltimateWindow(Window):
         elif key == 'a':
             prompt = '目標排名'
             kwargs['target_ad']= ''
-        elif key == 'r':
+        elif key == 'o':
             prompt = '最低ROAS'
             kwargs['min_roas']= ''
         elif key == 'd':
@@ -321,8 +349,12 @@ class UltimateWindow(Window):
                 id = self.getValue(values, 'id')
                 name = self.getValue(values, 'name')
                 self.table.delete(selected)
-                self.histories.delete(id, name)
+                History.delete(id, name)
             return
+        elif key == 'r':
+            for selected in self.table.selection():
+                await self.updateRow(selected, ad='')
+                self.priorityRows.put(selected)
         input = simpledialog.askstring(title='', prompt=prompt)
         if input == None:
             return
@@ -359,7 +391,8 @@ class UltimateWindow(Window):
             print(e)
             logging.debug(e.__class__, exc_info=True) 
 
-    async def insertRow(self, advertisement):
+    def insertRow(self, advertisement):
+        print('inserting ad', advertisement)
         try:
             values = [''] * len(self.columns)
             values[self.getIndex('id')] = advertisement[1]
@@ -371,8 +404,9 @@ class UltimateWindow(Window):
                 self.priorityRows.put(row)
             else:
                 self.backgroundRows.put(row)
+            print('row', row)
         except Exception as e:
-            pass
+            print('exception', e)
 
     async def updateRow(self, row, **kwargs):
         values = self.table.item(row, 'values')
@@ -380,7 +414,8 @@ class UltimateWindow(Window):
         newValues = list(values)
         for key, value in kwargs.items():
             newValues[self.getIndex(key)] = value
-            if key == 'time' or 'target_ad':
+            if key == 'time' or key == 'target_ad':
+                print('inserting priority:', row)
                 self.priorityRows.put(row)
         id = self.getValue(newValues, 'id')
         name = self.getValue(newValues, 'name')
@@ -392,7 +427,7 @@ class UltimateWindow(Window):
         roas = self.getValue(newValues, 'roas')
         if target_ad != '':
             tags.append('auto')
-            self.histories.update(target_ad, id, name)
+            History.update(target_ad, id, name)
         if new_price != '':
             tags.append('change')
         if max_price != '':
@@ -404,13 +439,21 @@ class UltimateWindow(Window):
                 tags.append('roas_alert')
         self.table.item(row, values=newValues, tags=tags, image='')
 
-    async def addKeyword(self):
-        name = simpledialog.askstring(title='新增', prompt='關鍵字')
-        if name == None:
-            return
-        for ad in self.advertisements.select(name):
-            self.histories.insert((*ad, ''))
-            await self.insertRow((*ad, ''))
+    # def addKeyword(self, shop, id, name, price):
+    #     print('adding keyword', shop, id, name, price)
+    #     # History.insert(shop, id, name, price, '')
+    #     try:
+    #         self.insertRow((shop, id, name, price, ''))
+    #     except Exception as e:
+    #         print(e)
+    #     print('done')
+        # name = simpledialog.askstring(title='新增', prompt='關鍵字')
+        # if name == None:
+        #     return
+        
+        # for ad in self.advertisements.select(name):
+            # History.insert((*ad, ''))
+            # self.insertRow((*ad, ''))
 
     def getValue(self, values, colName):
         return values[self.getIndex(colName)]
